@@ -1,0 +1,973 @@
+---
+title: "AN588-Week-6"
+author: "Jess Martin"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Module 11 (Type I and II Errors and Statistical Power)
+
+**Preliminaries:**
+
+Install these packages in R: {curl}, {ggplot2}, {manipulate}
+
+**Objectives:**
+
+The objective of this module is to discuss the concepts of Type I and Type II error, the multiple testing problem, statistical power, and effect size and outline how we can use R to investigate these via simulation and built-in functions.
+
+**Overview:**
+
+Let’s return to the concepts of error and power. Recall that Type I error occurs when you incorrectly reject a true H0. In any given hypothesis test, the probability of a Type I error is equivalent to the significance level, α, and it is this type of error we are often trying to minimize when we are doing classical statistical inference. Type II error occurs when you incorrectly fail to reject a false H0 (in other words, fail to find evidence in support of a true HA). Since we do not know what the true HA actually is, the probability of committing such an error, labeled β, is not usually known in practice.
+
+What is True,	What We Decide,	Result
+H0, H0, Correctly ‘accept’ the null
+
+H0, HA, Falsely reject the null (Type I error)
+
+HA, H0, Falsely ‘accept’ the null (Type II error)
+
+HA, HA, Correctly reject the null
+
+**Type I Error and the Multiple Testing Problem:**
+
+Because of how we define α, the chance probabilty of falsely rejecting H0 when H0 is actually true, we would expect to find some “significant” results if we run enough independent hypothesis tests. For example, if we set α at 0.05, we would expect to find one “significant” result in roughly every 20 tests we run, just by chance. The relation of α to the distribution of a variable under a null hypothesis (μ = μ0) versus an alternative hypothesis (e.g., μ > μ0) is shown in the figure below (this example is for an upper one-tailed test). It should be clear that we can reduce the chance of Type I error by decreasing α (shifting the critical value to the right in the H0 distribution). Type I error will also be reduced as the means get further apart or as the standard deviation of the distributions shrinks.
+
+Let’s explore this via simulation.
+
+We will write some code to simulate a bunch of random datasets from a normal distribution where we set the expected population mean (μ0) and standard deviation (σ) and then calculate a Z (or T) statistic and p value for each one. We will then look at the “Type I” error rate… the proportion of times that, based on our sample, we would conclude that it was not drawn from the distribution we know to be true.
+
+First, let’s set up a skeleton function we will call typeI() to evaluate the Type I error rate. It should take, as arguments, the parameters of the normal distribution for the null hypothesis we want to simulate from (μ0 and σ), our sample size, our $ level, what “alternative” type of Z (or T) test we want to do (“greater”, “less”, or “two.tailed”) and the number of simulated datasets we want to generate. Type in the code below (and note that we set default values for α and the number of simulations). Note that we can use the “t” family of functions instead of the “norm” family.
+
+```{R, Part 1}
+typeI <- function(mu0, sigma, n, alternative = "two.tailed", alpha = 0.05, k = 10000) {
+}
+```
+
+Now, we will add the body of the function.
+
+```{R, Part 2}
+typeI <- function(mu0, sigma, n, alternative = "two.tailed", alpha = 0.05, k = 1000) {
+    p <- rep(NA, k)  # sets up a vector of empty p values
+    for (i in 1:k) {
+        # sets up a loop to run k simulations
+        x <- rnorm(n = n, mean = mu0, sd = sigma)  # draws a sample from our distribution
+        m <- mean(x)  # calculates the mean
+        s <- sd(x)  # calculates the standard deviation
+        z <- (m - mu0)/(s/sqrt(n))  # calculates the T statistic for the sample drawn from the null distribution relative to the null distribution
+        # alternatively use t <- (m-mu0)/(s/sqrt(n))
+        if (alternative == "less") {
+            p[i] <- pnorm(z, lower.tail = TRUE)  # calculates the associated p value
+            # alternatively, use p[i] <- pt(t,df=n-1,lower.tail=TRUE)
+        }
+        if (alternative == "greater") {
+            p[i] <- pnorm(z, lower.tail = FALSE)  # calculates the associated p value
+            # alternatively, use p[i] <- pt(t,df=n-1,lower.tail=FALSE)
+        }
+        if (alternative == "two.tailed") {
+            if (z > 0)
+                {
+                  p[i] <- 2 * pnorm(z, lower.tail = FALSE)
+                }  # alternatively, use if (t > 0) {p[i] <- pt(t,df=n-1,lower.tail=FALSE)}
+            if (z < 0)
+                {
+                  p[i] <- 2 * pnorm(z, lower.tail = TRUE)
+                }  # alternatively, use if (t < 0) {p[i] <- pt(t,df=n-1,lower.tail=TRUE)}
+        }
+    }
+
+    curve(dnorm(x, mu0, sigma/sqrt(n)), mu0 - 4 * sigma/sqrt(n), mu0 + 4 * sigma/sqrt(n),
+        main = paste("Sampling Distribution Under the Null Hypothesis\nType I error rate from simulation = ",
+            length(p[p < alpha])/k, sep = ""), xlab = "x", ylab = "Pr(x)", col = "red",
+        xlim = c(mu0 - 4 * sigma/sqrt(n), mu0 + 4 * sigma/sqrt(n)), ylim = c(0,
+            dnorm(mu0, mu0, sigma/sqrt(n))))
+    abline(h = 0)
+
+    if (alternative == "less") {
+        polygon(cbind(c(mu0 - 4 * sigma/sqrt(n), seq(from = mu0 - 4 * sigma/sqrt(n),
+            to = mu0 - qnorm(1 - alpha) * sigma/sqrt(n), length.out = 100),
+            mu0 - qnorm(1 - alpha) * sigma/sqrt(n))), c(0, dnorm(seq(from = mu0 -
+            4 * sigma/sqrt(n), to = mu0 - qnorm(1 - alpha) * sigma/sqrt(n),
+            length.out = 100), mean = mu0, sd = sigma/sqrt(n)), 0), border = "black",
+            col = "grey")
+        q <- pnorm(mu0 - qnorm(1 - alpha) * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n)) -
+            pnorm(mu0 - 4 * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n))
+    }
+    if (alternative == "greater") {
+        polygon(cbind(c(mu0 + qnorm(1 - alpha) * sigma/sqrt(n), seq(from = mu0 +
+            qnorm(1 - alpha) * sigma/sqrt(n), to = mu0 + 4 * sigma/sqrt(n),
+            length.out = 100), mu0 + 4 * sigma/sqrt(n))), c(0, dnorm(seq(from = mu0 +
+            qnorm(1 - alpha) * sigma/sqrt(n), to = mu0 + 4 * sigma/sqrt(n),
+            length.out = 100), mean = mu0, sd = sigma/sqrt(n)), 0), border = "black",
+            col = "grey")
+        q <- pnorm(mu0 + 4 * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n)) -
+            pnorm(mu0 + qnorm(1 - alpha) * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n))
+    }
+    if (alternative == "two.tailed") {
+        polygon(cbind(c(mu0 - 4 * sigma/sqrt(n), seq(from = mu0 - 4 * sigma/sqrt(n),
+            to = mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n), length.out = 100),
+            mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n))), c(0, dnorm(seq(from = mu0 -
+            4 * sigma/sqrt(n), to = mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n),
+            length.out = 100), mean = mu0, sd = sigma/sqrt(n)), 0), border = "black",
+            col = "grey")
+        polygon(cbind(c(mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n), seq(from = mu0 +
+            qnorm(1 - alpha/2) * sigma/sqrt(n), to = mu0 + 4 * sigma/sqrt(n),
+            length.out = 100), mu0 + 4 * sigma/sqrt(n))), c(0, dnorm(seq(from = mu0 +
+            qnorm(1 - alpha/2) * sigma/sqrt(n), to = mu0 + 4 * sigma/sqrt(n),
+            length.out = 100), mean = mu0, sd = sigma/sqrt(n)), 0), border = "black",
+            col = "grey")
+        q <- pnorm(mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n)) -
+            pnorm(mu0 - 4 * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n)) +
+            pnorm(mu0 + 4 * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n)) -
+            pnorm(mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n), mean = mu0, sd = sigma/sqrt(n))
+    }
+    # print(round(q,digits=3)) # this prints area in the shaded portion(s)
+    # of the curve
+    return(length(p[p < alpha])/k)  # returns the proportion of simulations where p < alpha
+}
+```
+
+Take some time to really look through this code. Can you explain what each step of this code is doing?
+
+Now, run our Type I error test function with a couple of different values of μ0, σ, and α. What error rates are returned? They should be always be close to α!
+
+```{R, Part 3}
+eI <- typeI(mu0 = -3, sigma = 2, n = 5000, alternative = "greater", alpha = 0.05)
+```
+```{R, Part 4}
+eI <- typeI(mu0 = 5, sigma = 2, n = 1000, alternative = "less", alpha = 0.01)
+```
+**CHALLENGE 1**
+
+How does the Type I error rate change with n? With σ? With α
+? HINT: It shouldn’t change much… the Type I error rate is defined by α!
+
+The Type I error rate, often denoted as α (alpha), is the probability of rejecting a true null hypothesis. It should remain constant regardless of changes in other factors such as sample size (n) or the population standard deviation (σ). 
+
+Sample Size (n):
+
+The Type I error rate α is not directly affected by changes in sample size (n). Whether you have a small or large sample size, the significance level α remains the same if it is set by the researcher. α represents the acceptable level of risk for making a Type I error, and it is a predetermined constant.
+
+Population Standard Deviation (σ):
+
+The Type I error rate α is not influenced by the population standard deviation (σ). It is solely determined by the significance level set for the hypothesis test. The population standard deviation may impact the power of a test (the ability to detect an effect), but it doesn't affect the risk of making a Type I error.
+
+Significance Level (α):
+
+The Type I error rate α is defined by the significance level chosen for the hypothesis test. It represents the maximum allowable probability of rejecting a true null hypothesis. If you change α, you are changing the Type I error rate. For example, if you set α to 0.05, you are willing to accept a 5% chance of making a Type I error.
+
+
+**Multiple Comparison Corrections:**
+
+One way we can address the multiple testing problem discussed above by using what is called the Bonferroni correction, which suggests that when doing a total of k independent hypothesis tests, each with a significance level of α, we should adjust the α level we use to interpret statistical significance as follow: αB = α/k. For example, if we run 10 independent hypothesis tests, then we should set our adjusted α level for each test as 0.05/10 = 0.005. With the Bonferroni correction, we are essentially saying that we want to control the rate at which we have even one incorrect rejection of H0 given the entire family of tests we do. This is also referred to as limiting the “family-wise error rate” to level α.
+
+Note that many statisticians consider the Bonferroni correction to be a VERY conservative one, and there are other corrections we might use to account for multiple testing.
+
+```{R, Part 5}
+alpha <- 0.05
+pvals <- c(1e-04, 0.003, 0.005, 0.01, 0.02, 0.04, 0.045, 0.11, 0.18, 0.23)
+sig <- pvals <= alpha/length(pvals)
+sig  # first 3 values are less than the adjusted alpha
+```
+One common alternative to the Bonferroni correction is the Benjamini & Hochberg correction, which is less conservative. It attempts to control for the “false discovery rate”, which is different than the “family-wise error rate”. Here, we aim to limit the number of false “discoveries” (i.e., incorrect rejections of the null hypothesis) out of a set of discoveries (i.e., out of the set of results where we would reject the null hypothesis) to α.
+
+*Calculate p values for all tests
+*Order p values from smallest to largest (from p1 to pm)
+*Call any pi ≤ α x i/m significant
+
+```{R, Part 6}
+library(ggplot2)
+alpha <- 0.05
+psig <- NULL
+pvals <- c(1e-04, 0.003, 0.005, 0.01, 0.02, 0.04, 0.045, 0.11, 0.18, 0.27)
+for (i in 1:length(pvals)) {
+    psig[i] <- alpha * i/length(pvals)
+}
+d <- data.frame(cbind(rank = c(1:10), pvals, psig))
+p <- ggplot(data = d, aes(x = rank, y = pvals)) + geom_point() + geom_line(aes(x = rank,
+    y = psig))
+p
+```
+
+```{R, Part 7}
+sig <- pvals <= psig  # vector of significant pvalues
+sig  # first 5 values are less than the adjusted alpha
+```
+An alternative way of thinking about this is to adjust the p values themselves rather than the α levels. We can do this with a built-in R function, which makes the calculation easy.
+ 
+```{R, Part 8}
+ig <- p.adjust(pvals, method = "bonferroni") <= 0.05
+sig  # first 3 adjusted p values are less alpha
+```
+```{R, Part 9}
+sig <- p.adjust(pvals, method = "BH") <= 0.05
+sig  # first 4 adjusted p values are less alpha
+```
+**Type II Error:**
+
+By reducing the α level we use as our criterion for statistical significance, we can reduce the chance of committing a Type I error (incorrectly rejecting the null), but doing so directly increases our chance of committing a Type II error (incorrectly failing to reject the null). The shaded area in this figure below, β, is the probability of incorrectly failing to reject the null…
+
+It should be clear from this figure that if the critical value (which, again, is defined by α) is shifted to the left, or if μ under the alternative hypothesis shifts left, then β, the area under the null hypothesis distribution curve to the left of the critical value, increases! Intuitively, this makes sense: the lower the difference between the true μA value and μ0 and/or the higher the α level, the harder it will be to reject the null hypothesis that μ = μ0.
+
+In practice, we cannot usually calculate β because of the need to know where the true distribution is really centered (i.e., we need to know the value of μA, which is often unknown). However, we can explore via simulation what β is expected to look like under different alternative hypotheses (e.g., under different μA) and under different sample sizes and α levels.
+
+Let’s do this using the simulation approach we developed above. Again, we will write some code to simulate a bunch of random datasets, this time drawn from a normal distribution associated with a particular alternative hypothesis, HA, that we define… i.e., where we specify μA. We then calculate a Z (or T) statistic based on each sample dataset relative to μ0, the expected mean under H0, and determine the associated p value for each one. Based on this, we can calculate the Type II error rate… the proportion of times that, based on our samples, we would conclude that it was drawn from the H0 distribution rather than the HA distribution that we set to be true. Note that, as above, we can use the “t” family of functions in lieu of the “norm” family.
+
+```{R, Part 10}
+typeII <- function(mu0, muA, sigma, n, alternative = "two.tailed", alpha = 0.05,
+    k = 1000) {
+    p <- rep(NA, k)  # sets up a vector of empty p values
+    for (i in 1:k) {
+        x <- rnorm(n = n, mean = muA, sd = sigma)  # draw from Ha
+        m <- mean(x)
+        s <- sd(x)
+        z <- (m - mu0)/(s/sqrt(n))  # calculates the Z statistic for the sample drawn from Ha relative to the null distribution
+        if (alternative == "less") {
+            p[i] <- pnorm(z, lower.tail = TRUE)  # calculates the associated p value
+            hyp <- "muA < mu0"
+        }
+        if (alternative == "greater") {
+            p[i] <- pnorm(z, lower.tail = FALSE)
+            hyp <- "muA > mu0"
+        }
+        if (alternative == "two.tailed") {
+            if (z > 0) {
+                p[i] <- 2 * pnorm(z, lower.tail = FALSE)
+            }
+            if (z < 0) {
+                p[i] <- 2 * pnorm(z, lower.tail = TRUE)
+            }
+            hyp <- "muA ≠ mu0"
+        }
+    }
+
+    curve(dnorm(x, mu0, sigma/sqrt(n)), mu0 - 4 * sigma/sqrt(n), mu0 + 4 * sigma/sqrt(n),
+        main = paste("Sampling Distributions Under the Null (red)\nand Alternative Hypotheses (blue)\nType II error rate from simulation = ",
+            length(p[p >= alpha])/k, sep = ""), xlab = "x", ylab = "Pr(x)",
+        col = "red", xlim = c(min(c(mu0 - 4 * sigma/sqrt(n), muA - 4 * sigma/sqrt(n))),
+            max(c(mu0 + 4 * sigma/sqrt(n), muA + 4 * sigma/sqrt(n)))), ylim = c(0,
+            max(c(dnorm(mu0, mu0, sigma/sqrt(n))), dnorm(muA, muA, sigma/sqrt(n)))))
+
+    curve(dnorm(x, muA, sigma/sqrt(n)), muA - 4 * sigma/sqrt(n), muA + 4 * sigma/sqrt(n),
+        col = "blue", add = TRUE)
+    abline(h = 0)
+
+    if (alternative == "less") {
+        polygon(cbind(c(mu0 - qnorm(1 - alpha) * sigma/sqrt(n), seq(from = mu0 -
+            qnorm(1 - alpha) * sigma/sqrt(n), to = muA + 4 * sigma/sqrt(n),
+            length.out = 100), muA + 4 * sigma/sqrt(n))), c(0, dnorm(seq(mu0 -
+            qnorm(1 - alpha) * sigma/sqrt(n), to = muA + 4 * sigma/sqrt(n),
+            length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0), border = "black",
+            col = "grey")
+        abline(v = mu0 - qnorm(1 - alpha) * sigma/sqrt(n), col = "black", lty = 3,
+            lwd = 2)
+    }
+
+    if (alternative == "greater") {
+        polygon(cbind(c(muA - 4 * sigma/sqrt(n), seq(from = muA - 4 * sigma/sqrt(n),
+            to = mu0 + qnorm(1 - alpha) * sigma/sqrt(n), length.out = 100),
+            mu0 + qnorm(1 - alpha) * sigma/sqrt(n))), c(0, dnorm(seq(from = muA -
+            4 * sigma/sqrt(n), to = mu0 + qnorm(1 - alpha) * sigma/sqrt(n),
+            length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0), border = "black",
+            col = "grey")
+        abline(v = mu0 + qnorm(1 - alpha) * sigma/sqrt(n), col = "black", lty = 3,
+            lwd = 2)
+    }
+
+    if (alternative == "two.tailed") {
+        abline(v = mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n), col = "black",
+            lty = 3, lwd = 2)
+        abline(v = mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n), col = "black",
+            lty = 3, lwd = 2)
+
+        if (z > 0) {
+            # greater
+            polygon(cbind(c(muA - 4 * sigma/sqrt(n), seq(from = muA - 4 * sigma/sqrt(n),
+                to = mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n), length.out = 100),
+                mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n))), c(0, dnorm(seq(from = muA -
+                4 * sigma/sqrt(n), to = mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n),
+                length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0), border = "black",
+                col = "grey")
+        }
+
+        # less
+        if (z < 0) {
+            polygon(cbind(c(mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n), seq(from = mu0 -
+                qnorm(1 - alpha/2) * sigma/sqrt(n), to = muA + 4 * sigma/sqrt(n),
+                length.out = 100), muA + 4 * sigma/sqrt(n))), c(0, dnorm(seq(mu0 -
+                qnorm(1 - alpha/2) * sigma/sqrt(n), to = muA + 4 * sigma/sqrt(n),
+                length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0), border = "black",
+                col = "grey")
+        }
+    }
+
+    return(length(p[p >= alpha])/k)
+}
+```
+
+**CHALLENGE 2**
+
+Explore this function using different values of μ0, σ, n, and different types of one- and two-tailed tests.
+
+```{R, Part 11}
+eII <- typeII(mu0 = 2, muA = 4, sigma = 3, n = 6, alternative = "greater")  # Ha > H0
+```
+```{R, Part 12}
+eII <- typeII(mu0 = 5, muA = 2, sigma = 4, n = 18, alternative = "less")  # Ha < H0
+```
+
+```{R, Part 13}
+eII <- typeII(mu0 = 5, muA = 7, sigma = 2, n = 15, alternative = "two.tailed")  # Ha ≠ H0
+```
+
+**Power:**
+
+Power is the probability of correctly rejecting a null hypothesis that is untrue. For a test that has a Type II error rate of β, the statistical power is defined, simply, as 1−β. Power values of 0.8 or greater are conventionally considered to be high. Power for any given test depends on the difference between μ between groups/treatments, α, n, and σ.
+
+**Effect Size:**
+
+Generally speaking, an effect size is a quantitative measure of the strength of a phenomenon. Here, we are interested in comparing two sample means, and the most common way to describe the effect size is as a standardized difference between the means of the groups being compared. In this case, we divide the difference between the means by the standard deviation: |(μ0- μA)|/σ. This results in a scaleless measure. Conventionally, effect sizes of 0.2 or less are considered to be low and of 0.8 or greater are considered to be high.
+
+**Graphical Depiction of Power and Effect Size:**
+
+The code below lets you explore power and effect size interactively. You can use the sliders to set μ0 and μA for a one-sample test (or, alternatively, think about these as μ1 and μ2 for a two-sample test), σ, α, n, and you can choose whether you are testing a one-sided hypothesis of μA being “greater” or “less” than μA or are testing the two-sided hypothesis that μA ≠ μ0 (“two.tailed”). The graph will output Power and Effect Size.
+
+```{R, Part 14}
+library(ggplot2)
+library(manipulate)
+power.plot <- function(sigma, muA, mu0, n, alpha, alternative = "two.tailed") {
+    pow <- 0
+    z <- (muA - mu0)/(sigma/sqrt(n))
+    g <- ggplot(data.frame(mu = c(min(mu0 - 4 * sigma/sqrt(n), muA - 4 * sigma/sqrt(n)),
+        max(mu0 + 4 * sigma/sqrt(n), muA + 4 * sigma/sqrt(n)))), aes(x = mu)) +
+        ggtitle("Explore Power for Z Test")
+    g <- g + ylim(c(0, max(dnorm(mu0, mu0, sigma/sqrt(n)) + 0.1, dnorm(muA,
+        muA, sigma/sqrt(n)) + 0.1)))
+    g <- g + stat_function(fun = dnorm, geom = "line", args = list(mean = mu0,
+        sd = sigma/sqrt(n)), size = 1, col = "red", show.legend = TRUE)
+    g <- g + stat_function(fun = dnorm, geom = "line", args = list(mean = muA,
+        sd = sigma/sqrt(n)), size = 1, col = "blue", show.legend = TRUE)
+
+    if (alternative == "greater") {
+        if (z > 0) {
+            xcrit = mu0 + qnorm(1 - alpha) * sigma/sqrt(n)
+            g <- g + geom_segment(x = xcrit, y = 0, xend = xcrit, yend = max(dnorm(mu0,
+                mu0, sigma/sqrt(n)) + 0.025, dnorm(muA, muA, sigma/sqrt(n)) +
+                0.025), size = 0.5, linetype = 3)
+            g <- g + geom_polygon(data = data.frame(cbind(x = c(xcrit, seq(from = xcrit,
+                to = muA + 4 * sigma/sqrt(n), length.out = 100), muA + 4 * sigma/sqrt(n)),
+                y = c(0, dnorm(seq(from = xcrit, to = muA + 4 * sigma/sqrt(n),
+                  length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0))),
+                aes(x = x, y = y), fill = "blue", alpha = 0.5)
+            pow <- pnorm(muA + 4 * sigma/sqrt(n), muA, sigma/sqrt(n)) - pnorm(xcrit,
+                muA, sigma/sqrt(n))
+        }
+    }
+    if (alternative == "less") {
+        if (z < 0) {
+            xcrit = mu0 - qnorm(1 - alpha) * sigma/sqrt(n)
+            g <- g + geom_segment(x = xcrit, y = 0, xend = xcrit, yend = max(dnorm(mu0,
+                mu0, sigma/sqrt(n)) + 0.025, dnorm(muA, muA, sigma/sqrt(n)) +
+                0.025), size = 0.5, linetype = 3)
+            g <- g + geom_polygon(data = data.frame(cbind(x = c(muA - 4 * sigma/sqrt(n),
+                seq(from = muA - 4 * sigma/sqrt(n), to = xcrit, length.out = 100),
+                xcrit), y = c(0, dnorm(seq(from = muA - 4 * sigma/sqrt(n), to = xcrit,
+                length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0))), aes(x = x,
+                y = y), fill = "blue", alpha = 0.5)
+            pow <- pnorm(xcrit, muA, sigma/sqrt(n)) - pnorm(muA - 4 * sigma/sqrt(n),
+                muA, sigma/sqrt(n))
+        }
+    }
+    if (alternative == "two.tailed") {
+        if (z > 0) {
+            xcrit = mu0 + qnorm(1 - alpha/2) * sigma/sqrt(n)
+            g <- g + geom_segment(x = xcrit, y = 0, xend = xcrit, yend = max(dnorm(mu0,
+                mu0, sigma/sqrt(n)) + 0.025, dnorm(muA, muA, sigma/sqrt(n)) +
+                0.025), size = 0.5, linetype = 3)
+            g <- g + geom_polygon(data = data.frame(cbind(x = c(xcrit, seq(from = xcrit,
+                to = muA + 4 * sigma/sqrt(n), length.out = 100), muA + 4 * sigma/sqrt(n)),
+                y = c(0, dnorm(seq(from = xcrit, to = muA + 4 * sigma/sqrt(n),
+                  length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0))),
+                aes(x = x, y = y), fill = "blue", alpha = 0.5)
+            pow <- pnorm(muA + 4 * sigma/sqrt(n), muA, sigma/sqrt(n)) - pnorm(xcrit,
+                muA, sigma/sqrt(n))
+        }
+        if (z < 0) {
+            xcrit = mu0 - qnorm(1 - alpha/2) * sigma/sqrt(n)
+            g <- g + geom_segment(x = xcrit, y = 0, xend = xcrit, yend = max(dnorm(mu0,
+                mu0, sigma/sqrt(n)) + 0.025, dnorm(muA, muA, sigma/sqrt(n)) +
+                0.025), size = 0.5, linetype = 3)
+            g <- g + geom_polygon(data = data.frame(cbind(x = c(muA - 4 * sigma/sqrt(n),
+                seq(from = muA - 4 * sigma/sqrt(n), to = xcrit, length.out = 100),
+                xcrit), y = c(0, dnorm(seq(from = muA - 4 * sigma/sqrt(n), to = xcrit,
+                length.out = 100), mean = muA, sd = sigma/sqrt(n)), 0))), aes(x = x,
+                y = y), fill = "blue", alpha = 0.5)
+            pow <- pnorm(xcrit, muA, sigma/sqrt(n)) - pnorm(muA - 4 * sigma/sqrt(n),
+                muA, sigma/sqrt(n))
+        }
+    }
+    g <- g + annotate("text", x = max(mu0, muA) + 2 * sigma/sqrt(n), y = max(dnorm(mu0,
+        mu0, sigma/sqrt(n)) + 0.075, dnorm(muA, muA, sigma/sqrt(n)) + 0.075),
+        label = paste("Effect Size = ", round((muA - mu0)/sigma, digits = 3),
+            "\nPower = ", round(pow, digits = 3), sep = ""))
+    g <- g + annotate("text", x = min(mu0, muA) - 2 * sigma/sqrt(n), y = max(dnorm(mu0,
+        mu0, sigma/sqrt(n)) + 0.075, dnorm(muA, muA, sigma/sqrt(n)) + 0.075),
+        label = "Red = mu0\nBlue = muA")
+    g
+}
+```
+
+{R, Part 15}
+manipulate(plot(1:5, cex = size), size = slider(0.5, 10, step = 0.5))  #run this to get it going
+manipulate(power.plot(sigma, muA, mu0, n, alpha, alternative), sigma = slider(1,
+    10, step = 1, initial = 4), muA = slider(-10, 10, step = 1, initial = 2),
+    mu0 = slider(-10, 10, step = 1, initial = 0), n = slider(1, 50, step = 1,
+        initial = 16), alpha = slider(0.01, 0.1, step = 0.01, initial = 0.05),
+    alternative = picker("two.tailed", "greater", "less"))
+```
+NOTE: You must run a manipulate() command in the console (i.e., you cannot run it inline from a chunk). As such, please copy/paste the whole manipulate() code directly to the console to run. If you don’t see the slider to toggle the values - it should appear as a pop-up box - press the gear symbol in the top right corner of the plot, which should cause the slider to appear.
+
+In most cases, since we are dealing with limited samples from a population, we will want to use the t rather than the normal distibution as the basis for making our power evaluations. The power.t.test() function lets us easily implement power calculations based on the t distribution, and the results of using it should be very similar to those we found above by simulation. The power.t.test() function takes as possible arguments the sample size (n), the difference (delta, δ) between group means, the standard deviation of the data = sigma (σ), the sig.level = alpha (α), the test type (“two.sample”, “one.sample”, or “paired”), the alternative test to run (“two.sided”, “one sidedd”) and the power. Power, n, or the difference between means is left as null and the other arguments are specified. The function then calculate the missing argument.
+
+**CHALLENGE 3**
+
+Using the code below, which graphs the Type II error rate (β) and Power (1−β) for T tests (using the power.t.test() function), explore the effects of changing α, within sample variability (σ), and the difference between sample means (i.e., μ0 and μA for a one sample test (or, equivalently, μ1 and μ2 for a two sample test). The plot shows the effect size, given the difference between the means, (i.e., |(μ0−μA)|/σ) and marks the sample size (n) needed to achieve a power of 0.8.
+
+```{R, Part 16}
+library(ggplot2)
+library(manipulate)
+power.test <- function(mu0, muA, sigma, alpha = 0.05, type, alternative) {
+    p <- 0
+    for (i in 2:200) {
+        x <- power.t.test(n = i, delta = abs(muA - mu0), sd = sigma, sig.level = alpha,
+            power = NULL, type = type, alternative = alternative)
+        p <- c(p, x$power)
+    }
+    d <- data.frame(cbind(1:200, p, 1 - p))
+    critn <- 0
+    for (i in 1:199) {
+        if (p[i] < 0.8 && p[i + 1] >= 0.8) {
+            critn <- i + 1
+        } else {
+            critn <- critn
+        }
+    }
+    names(d) <- c("n", "power", "beta")
+    g <- ggplot(data = d) + xlab("sample size n") + ylab("Type II Error Rate, Beta  (Red)\nand\nPower, 1-Beta (Blue)") +
+        ggtitle("Power for T Tests\n(assuming equal n and variance across the two groups)") +
+        ylim(0, 1) + geom_point(aes(x = n, y = power), colour = "blue", alpha = 1/2) +
+        geom_line(aes(x = n, y = power), colour = "blue", alpha = 1/2) + geom_line(aes(x = n,
+        y = 0.8), colour = "red", lty = 3) + geom_point(aes(x = n, y = beta),
+        colour = "red", alpha = 1/2) + geom_line(aes(x = n, y = beta), colour = "red",
+        alpha = 1/2) + geom_linerange(aes(x = critn, ymin = 0, ymax = 0.8),
+        colour = "blue", alpha = 1/4) + annotate("text", x = 150, y = 0.5, label = paste("Effect Size = ",
+        round(abs(mu0 - muA)/sigma, digits = 3), "\nCritical n = ", critn, sep = ""))
+    print(g)
+}
+```
+
+``{R, Part 17}
+manipulate(plot(1:5, cex = size), size = slider(0.5, 10, step = 0.5))  #run this to get it going
+manipulate(power.test(mu0, muA, sigma, alpha, type, alternative), mu0 = slider(-10,
+    10, initial = 3, step = 1), muA = slider(-10, 10, initial = 0, step = 1),
+    sigma = slider(1, 10, initial = 3, step = 1), alpha = slider(0.01, 0.1,
+        initial = 0.05, step = 0.01), alternative = picker("two.sided", "one.sided"),
+    type = picker("two.sample", "one.sample", "paired"))
+```
+
+## Module 12 (Introduction to Linear Regression)
+
+**Preliminaries:**
+
+Install these packages in R: {curl}, {ggplot2}, {gridExtra}, {manipulate}, {lmodel2}
+
+**Objectives:**
+
+The objective of this module is to discuss the use of simple linear regression to explore the relationship among two continuous variables: a single predictor variable and a single response variable.
+
+**Covariance and Correlation:**
+
+So far, we have looked principally at single variables, but one of the main things we are often interested in is the relationships among two or more variables. Regression modeling is one of the most powerful and important set of tools for looking at relationships among more than one variable. With our zombie apocalypse survivor dataset, we started to do this using simple bivariate scatterplots… let’s look at those data again and do a simple bivariate plot of height by weight.
+
+```{R, Part 18}
+library(curl)
+```
+
+```{R, Part 19}
+library(ggplot2)
+f <- curl("https://raw.githubusercontent.com/fuzzyatelin/fuzzyatelin.github.io/master/AN588_Fall23/zombies.csv")
+d <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+head(d)
+```
+
+```{R, Part 20}
+plot(data = d, height ~ weight)
+```
+
+These variables clearly seem to be related to one another, in that as weight increases, height increases. There are a couple of different ways we can quantify the relationship between these variables. One is the covariance, which expresses how much two numeric variables “change together” and whether that change is positive or negative.
+
+Recall that the variance in a variable is simply the sum of the squared deviaiations of each observation from the mean divided by sample size (n for population variance or n-1 for sample variance). Thus, sample variance is:
+
+Similarly, the covariance is simply the product of the deviations of each of two variables from their respective means divided by sample size. So, for two vectors, x and y, each of length n representing two variables describing a sample…
+
+
+**CHALLENGE 1**
+
+What is the covariance between zombie survivor weight and zombie survivor height? What does it mean if the covariance is positive versus negative? Does it matter if you switch the order of the two variables?
+
+```{R, Part 21}
+w <- d$weight
+h <- d$height
+n <- length(w)  # or length(h)
+cov_wh <- sum((w - mean(w)) * (h - mean(h)))/(n - 1)
+cov_wh
+```
+
+The built-in R function cov() yields the same.
+
+```{R, Part 22}
+cov(w, h)
+```
+The covariance between zombie survivor weight and height is 66.03314.
+
+Positive Covariance: A positive covariance indicates that when one variable (e.g., weight) tends to be above its mean, the other variable (e.g., height) also tends to be above its mean. In other words, there is a tendency for both variables to increase or decrease together. Positive covariance suggests a positive linear relationship between the two variables. When one goes up, the other tends to go up as well.
+
+Negative Covariance: A negative covariance would indicate that when one variable is above its mean, the other tends to be below its mean. In this case, there is a tendency for one variable to increase while the other decreases. Negative covariance suggests a negative linear relationship between the two variables. When one goes up, the other tends to go down.
+
+The order of the two variables does matter when calculating covariance. Switching the order of the variables will yield the same absolute value for the covariance but with a different sign (positive becomes negative, and vice versa). 
+
+We often describe the relationship between two variables using the correlation coefficient, which is a standardized form of the covariance, which summarizes on a standard scale, -1 to +1, both the strength and direction of a relationship. The correlation is simply the covariance divided by the product of the standard deviation of both variables.
+
+**CHALLENGE 2**
+
+Calculate the correlation between zombie survivor height and weight.
+
+```{R, Part 23}
+sd_w <- sd(w)
+sd_h <- sd(h)
+cor_wh <- cov_wh/(sd_w * sd_h)
+cor_wh
+```
+
+Again, there is a built-in R function cor() which yields the same.
+
+```{R, Part 24}
+cor(w, h)
+```
+
+```{R, Part 25}
+cor(w, h, method = "pearson")
+```
+
+This formulation of the correlation coefficient is referred to as Pearson’s product-moment correlation coefficient and is often abbreviated as ρ.
+
+There are other, nonparametric forms of the correlation coefficient we might also calculate, in the case that our data do not follow the assumptions of a normal distribution. Spearman’s rank-order correlation coefficient (r) is the most common, and roughly approximate’s Pearson’s ρ, but there are others (like Kendall’s τ, which is also fairly common):
+
+```{R, Part 26}
+cor(w, h, method = "spearman")
+```
+
+```{R, Part 27}
+cor(w, h, method = "kendall")
+```
+
+**Regression:**
+
+Regression is the set of tools that lets us explore the relationships between variables further. In regression analysis, we are typically identifying and exploring linear models, or functions, that describe the relationship between variables. There are a couple of main purposes for undertaking regression analyses:
+
+*To use one or more variables to predict the value of another
+*To develop and choose among different models of the relationship between variables
+*To do analyses of covariation among sets of variables to identify their relative explanatory power
+
+The general purpose of linear regression is to come up with a model or function that estimates the mean value of one variable, i.e., the response or outcome variable, given the particular value(s) of another variable or set of variables, i.e., the predictor variable(s).
+
+We’re going to start off with simple bivariate regression, where we have a single predictor and a single response variable. In our case, we may be interested in coming up with a linear model that estimates the mean value for zombie height (as the response variable) given zombie weight (as the predictor variable). That is, we want to explore functions that link these two variables and choose the best one.
+
+In general, the model for linear regression represents a dependent (or response) variable, Y as a linear function of the independent (or predictor) variable, X.
+
+Y=β0+β1Xi+ϵi
+
+The function has two coefficients. The first β0 is the intercept, the value of Y when X = 0. The second β1 is the slope of the line. The error term, ϵi is a normal random variable, ϵi∼N(0,σ2) with the standard deviation assumed to be constant across all values of X.
+
+A regression analysis calls for estimating the values of all three parameters (β0, β1, and the residuals or error term). How this is accomplished will depend on what assumptions are employed in the analysis. The regression model posits that X is the cause of Y.
+
+Looking at our scatterplot above, it seems pretty clear that there is indeed some linear relationship among these variables, and so a reasonable function to connect height to weight should simply be some kind of line of best fit. Recall that the general formula for a line is:
+
+where  = our predicted y given a value of x
+
+In regression parlance…
+
+[see equation 20.2 in The Book of R]
+
+Here, β1 and β0 are referred to as the regression coefficients, and it is those that our regression analysis is trying to estimate, while minimizing, according to some criterion, the error term. This process of estimation is called “fitting the model.”
+
+A typical linear regression analysis further assumes that X, our “independent” variable, is controlled and thus measured with much greater precision than Y, our “dependent” variable. Thus the error, ϵi is assumed to be restricted to the Y dimension, with little or no error in measuring X, and we employ “ordinary least squares” as our criterion for best fit.
+
+What does this mean? Well, we can imagine a family of lines of different β1 and β0 going through this cloud of points, and the best fit criterion we use is to find the line whose coefficients minimize the sum of the squared deviations of each observation in the Y direction from that predicted by the line. This is the basis of ordinary least squares or OLS regression. We want to wind up with an equation that tells us how Y varies in response to changes in X.
+
+So, we want to find β1 and β0 that minimizes…
+
+or, equivalently,
+
+In our variables, this is…
+
+Let’s fit the model by hand… The first thing to do is estimate the slope, which we can do if we first “center” each of our variables by subtracting the mean from each value (this shifts the distribution to eliminate the intercept term).
+
+```{R, Part 28}
+y <- h - mean(h)
+x <- w - mean(w)
+z <- data.frame(cbind(x, y))
+g <- ggplot(data = z, aes(x = x, y = y)) + geom_point()
+g
+```
+
+Now, we just need to minimize…
+
+We can explore finding the best slope (β1) for this line using an interactive approach…
+
+```{R, Part 29}
+slope.test <- function(beta1) {
+    g <- ggplot(data = z, aes(x = x, y = y))
+    g <- g + geom_point()
+    g <- g + geom_abline(intercept = 0, slope = beta1, size = 1, colour = "blue",
+        alpha = 1/2)
+    ols <- sum((y - beta1 * x)^2)
+    g <- g + ggtitle(paste("Slope = ", beta1, "\nSum of Squared Deviations = ",
+        round(ols, 3)))
+    g
+}
+```
+
+{R, Part 30}
+manipulate(plot(1:5, cex = size), size = slider(0.5, 10, step = 0.5))  #priming the interface
+manipulate(slope.test(beta1), beta1 = slider(-1, 1, initial = 0, step = 0.005))  #here we go!
+```
+
+```{R, Part 31}
+beta1 <- cor(w, h) * (sd(h)/sd(w))
+beta1
+```
+
+```{R, Part 32}
+beta1 <- cov(w, h)/var(w)
+beta1
+```
+
+```{R, Part 33}
+beta1 <- sum((h - mean(h)) * (w - mean(w)))/sum((w - mean(w))^2)
+beta1
+```
+
+To find β0, we can simply plug back into our original regression model. The line of best fit has to run through the centroid of our data points, which is the point determined by the mean of the x values and the mean of the y values, so we can use the following:
+
+which, rearranged to solve for β0 gives…
+
+```{R, Part 34}
+beta0 <- mean(h) - beta1 * mean(w)
+beta0
+```
+
+Note that in the example above, we have taken our least squares criterion to mean minimizing the deviation of each of our Y variables from a line of best fit in a dimension perpendicular to the Y axis. In general, this kind of regression, where deviation is measured perpendicular to one of the axes, is known as Model I regression, and is used when the levels of the predictor variable are either measured without error (or, practically speaking, are measured with much less uncertainty than those of the response variable) or are set by the researcher (e.g., for defined treatment variables in an ecological experiment).
+
+**The lm() Function:**
+
+The function lm() in R makes all of the calculations we did above for Model I regression very easy! Below, we pass the zombies dataframe and variables directly to lm() and assign the result to an R object called m. We can then look at the various elements that R calculates about this model.
+
+```{R, Part 35}
+m <- lm(height ~ weight, data = d)
+m
+```
+
+```{R, Part 36}
+names(m)
+```
+
+```{R, Part 37}
+m$coefficients
+```
+
+```{R, Part 38}
+head(m$model)
+```
+
+In {ggplot}, we can easily create a plot that adds the linear model along with confidence intervals around the estimated value of y, or  at each x. Those intervals are important for when we move on to talking about inference in the regression context.
+
+```{R, Part 39}
+g <- ggplot(data = d, aes(x = weight, y = height))
+g <- g + geom_point()
+g <- g + geom_smooth(method = "lm", formula = y ~ x)
+g
+```
+
+The assumption of greater uncertainty in our response variable than in our predictor variable may be reasonable in controlled experiments, but for natural observations, measurement of the X variable also typically involves some error and, in fact, in many cases we may not be concered about PREDICTING Y from X but rather want to treat both X and Y as independent variables and explore the relationship between them or consider that both are dependent on some additional parameter, which may be unknown. That is, both are measured rather than “controlled” and both include uncertainty. We thus are not seeking an equation of how Y varies with changes in X, but rather we are look for how they both co-vary in response to some other variable or process. Under these conditions Model II regression analysis may be more appropriate. In Model II approaches, a line of best fit is chosen that minimizes in some way the direct distance of each point to the best fit line. There are several different types of Model II regression, and which to use depends upon the specifics of the case. Common approaches are know as major axis, ranged major axis, and reduced major axis (a.k.a. standard major axis) regression.
+
+The {lmodel2} package allows us to do Model II regression easily (as well as Model I). In this package, the signficance of the regression coefficients is determined based on permutation.
+
+```{R, Part 40}
+library(lmodel2)  # load the lmodel2 package
+# Run the regression
+mII <- lmodel2(height ~ weight, data = d, range.y = "relative", range.x = "relative",
+    nperm = 1000)
+mII
+```
+
+```{R, Part 41}
+plot(mII, "OLS")
+```
+
+```{R, Part 42}
+plot(mII, "RMA")
+```
+
+```{R, Part 43}
+plot(mII, "SMA")
+```
+
+```{R, Part 44}
+plot(mII, "MA")
+```
+
+Note that, here, running lmodel2() and using OLS to detemine the best coefficients yields equivalent results to our Model I regression done above using lm().
+
+```{R, Part 45}
+mI <- lm(height ~ weight, data = d)
+summary(mI)
+```
+
+```{R, Part 46}
+par(mfrow = c(1, 2))
+plot(mII, main = "lmodel2() OLS")
+plot(data = d, height ~ weight, main = "lm()")
+abline(mI)
+```
+
+**CHALLENGE 3**
+
+Using the zombie suvivors dataset, work with a partner to…
+
+*Plot zombie height as a function of age
+*Derive by hand the ordinary least squares regression coefficients β1 and β0 for these data.
+*Confirm that you get the same results using the lm() function
+*Repeat the analysis above for males and females separately (our non-binary sample may be too small, but you can try that, too, if you’re interested). Do your regression coefficients differ? How might you determine this?
+
+```{R, Part 47}
+plot(data = d, height ~ age)
+```
+
+```{R, Part 48}
+head(d)
+```
+
+```{R, Part 49}
+beta1 <- cor(d$height, d$age) * sd(d$height)/sd(d$age)
+beta1
+```
+
+```{R, Part 50}
+beta0 <- mean(d$height) - beta1 * mean(d$age)
+beta0
+```
+
+```{R, Part 51}
+m <- lm(height ~ age, data = d)
+m
+```
+
+**Statistical Inference in Regression:**
+
+Once we have our linear model and associated regression coefficients, we want to know a bit more about it. First, we want to be able to evaluate whether there is statistical evidence that there is indeed a relationship between these variables. If so, then our regression coefficients can indeed allow us to estimate or predict the value of one variable given another. Additionally, we also would like to be able to extend our estimates from our sample out to the population they are drawn from. These next steps involve the process of statistical inference.
+
+The output of the lm() function provides a lot of information useful for inference. Run the command summary() on the output of lm(data=d,height~weight)
+
+```{R, Part 52}
+m <- lm(data = d, height ~ weight)
+summary(m)
+```
+
+One of the outputs for the model, seen in the 2nd to last line in the output above, is the “R-squared” value, or the coefficient of determination, which is a summary of the total amount of variation in the y variable that is explained by the x variable. In our regression, ~69% of the variation in zombie height is explained by zombie weight.
+
+Another output is the standard error of the estimate of each regression coefficient, along with a corresponding t value and p value. Recall that t statistics are calculated as the difference between an observed and expected value divided by a standard error. The p value comes from evaluating the magnitude of the t statistic against a t distribution with n-2 degrees of freedom. We can confirm this by hand calculating t and p based on the estimate and the standard error of the estimate.
+
+```{R, Part 53}
+t <- coef(summary(m))
+t <- data.frame(unlist(t))
+colnames(t) <- c("Est", "SE", "t", "p")
+t
+```
+
+```{R, Part 54}
+t$calct <- (t$Est - 0)/t$SE
+t$calcp <- 2 * pt(t$calct, df = 998, lower.tail = FALSE)  # x2 because is 2-tailed test
+t
+```
+
+We can get confidence intervals for our estimates easily, too, using either the approach we’ve used before by hand or by using a built in function.
+
+```{R, Part 55}
+t$lower <- t$Est - qt(0.975, df = 998) * t$SE
+t$upper <- t$Est + qt(0.975, df = 998) * t$SE
+ci <- c(t$lower, t$upper)  # by hand
+ci
+```
+
+```{R, Part 56}
+ci <- confint(m, level = 0.95)  # using the results of lm()
+ci
+```
+
+**Interpreting Regression Coefficients and Prediction:**
+
+Estimating our regression coefficients is pretty straightforward… but what do they mean?
+
+The intercept, β0, is the PREDICTED value of y when the value of x is zero. The slope, β1 is EXPECTED CHANGE in units of y for every 1 unit of change in x. The overall equation allows us to calculate PREDICTED values of y for new observations of x. We can also calculate CONFIDENCE INTERVALS (CIs) around the predicted mean value of y for each value of x (which addresses our uncertainly in the estimate of the mean), and we can also get PREDICTION INTERVALS (PIs) around our prediction (which gives the range of actual values of y we might expect to see at a given value of x).
+
+**CHALLENGE 4**
+
+If zombie survivor weight is measured in pounds and zombie survivor height is measured in inches, what is the expected height of a zombie survivor weighing 150 pounds?
+
+What is the predicted difference in height between a zombie survivor weighing 180 and 220 pounds?
+
+```{R, Part 57}
+beta0 <- t$Est[1]
+beta1 <- t$Est[2]
+h_hat <- beta1 * 150 + beta0
+h_hat
+```
+
+```{R, Part 58}
+h_hat_difference <- (beta1 * 220 + beta0) - (beta1 * 180 + beta0)
+h_hat_difference
+```
+
+The predict() function allows us to generate predicted (i.e., ) values for a vector of values of x. Note the structure of the 2nd argument in the function… it includes the x variable name, and we pass it a vector of values. Here, I pass it a vector of actual x values.
+
+```{R, Part 59}
+m <- lm(data = d, height ~ weight)
+h_hat <- predict(m, newdata = data.frame(weight = d$weight))
+df <- data.frame(cbind(d$weight, d$height, h_hat))
+names(df) <- c("x", "y", "yhat")
+head(df)
+```
+
+```{R, Part 60}
+g <- ggplot(data = df, aes(x = x, y = yhat))
+g <- g + geom_point()
+g <- g + geom_point(aes(x = x, y = y), colour = "red")
+g <- g + geom_segment(aes(x = x, y = yhat, xend = x, yend = y))
+g
+```
+
+Each vertical line in the figure above represents a residual, the difference between the observed and the fitted or predicted value of y at the given x values.
+
+The predict() function also allows us to easily generate confidence intervals around our predicted mean value for y values easily.
+
+```{R, Part 61}
+ci <- predict(m, newdata = data.frame(weight = 150), interval = "confidence",
+    level = 0.95)  # for a single value
+ci
+```
+
+```{R, Part 62}
+ci <- predict(m, newdata = data.frame(weight = d$weight), interval = "confidence",
+    level = 0.95)  # for a vector of values
+head(ci)
+```
+
+```{R, Part 63}
+df <- cbind(df, ci)
+names(df) <- c("x", "y", "yhat", "CIfit", "CIlwr", "CIupr")
+head(df)
+```
+
+```{R, Part 64}
+g <- ggplot(data = df, aes(x = x, y = y))
+g <- g + geom_point(alpha = 1/2)
+g <- g + geom_line(aes(x = x, y = CIfit), colour = "black")
+g <- g + geom_line(aes(x = x, y = CIlwr), colour = "blue")
+g <- g + geom_line(aes(x = x, y = CIupr), colour = "blue")
+g
+```
+
+The same predict() function also allows us to easily generate prediction intervals for values of y at each x.
+
+```{R, Part 65}
+pi <- predict(m, newdata = data.frame(weight = 150), interval = "prediction",
+    level = 0.95)  # for a single value
+pi
+```
+
+```{R, Part 66}
+pi <- predict(m, newdata = data.frame(weight = d$weight), interval = "prediction",
+    level = 0.95)  # for a vector of values
+head(pi)
+```
+
+```{R, Part 67}
+df <- cbind(df, pi)
+names(df) <- c("x", "y", "yhat", "CIfit", "CIlwr", "CIupr", "PIfit", "PIlwr",
+    "PIupr")
+head(df)
+```
+
+```{R, Part 68}
+g <- g + geom_line(data = df, aes(x = x, y = PIlwr), colour = "red")
+g <- g + geom_line(data = df, aes(x = x, y = PIupr), colour = "red")
+g
+```
+
+**CHALLENGE 5**
+
+Construct a linear model for the regression of zombie survivor height on age and predict the mean height, the 95% confidence interval (CI) around the predicted mean height, and the 95% prediction interval (PI) around that mean for a vector of zombie survivor ages, v <- seq(from=10, to=30, by=1). Then, plot your points, your regression line, and lines for the lower and upper limits of the CI and of the PI.
+
+```{R, Part 69}
+v <- seq(from = 10, to = 30, by = 1)
+m <- lm(data = d, height ~ age)
+ci <- predict(m, newdata = data.frame(age = v), interval = "confidence", level = 0.95)
+pi <- predict(m, newdata = data.frame(age = v), interval = "prediction", level = 0.95)
+plot(data = d, height ~ age)
+lines(x = v, y = ci[, 1], col = "black")
+lines(x = v, y = ci[, 2], col = "blue")
+lines(x = v, y = ci[, 3], col = "blue")
+lines(x = v, y = pi[, 2], col = "red")
+lines(x = v, y = pi[, 3], col = "red")
+```
+
+```{R, Part 70}
+# or
+require(gridExtra)
+```
+
+```{R, Part 71}
+require(ggplot2)
+df <- data.frame(cbind(v, ci, pi))
+names(df) <- c("age", "CIfit", "CIlwr", "CIupr", "PIfit", "PIlwr", "PIupr")
+head(df)
+```
+
+```{R, Part 72}
+g1 <- ggplot(data = d, aes(x = age, y = height))
+g1 <- g1 + geom_point(alpha = 1/2)
+g1 <- g1 + geom_line(data = df, aes(x = v, y = CIfit), colour = "black", lwd = 1)
+g1 <- g1 + geom_line(data = df, aes(x = v, y = CIlwr), colour = "blue")
+g1 <- g1 + geom_line(data = df, aes(x = v, y = CIupr), colour = "blue")
+g1 <- g1 + geom_line(data = df, aes(x = v, y = PIlwr), colour = "red")
+g1 <- g1 + geom_line(data = df, aes(x = v, y = PIupr), colour = "red")
+g2 <- ggplot(data = d, aes(x = age, y = height))
+g2 <- g2 + geom_point(alpha = 1/2)
+g2 <- g2 + geom_smooth(method = "lm", formula = y ~ x)
+grid.arrange(g1, g2, ncol = 2)
+```
+
+Again, here the CI band shows where the mean height is expected to fall in 95% of samples and the PI band shows where the individual points are expected to fall 95% of the time.
+
+**Residuals:**
+
+From our various plots above, it’s clear that our model is not explaining all of the variation we see in our dataset… our y points do not all fall on the yhat line but rather are distributed around it. The distance of each of these points from the predicted value for y at that value of x is known as the “residual”. We can think about the residuals as “what is left over”” after accounting for the predicted relationship between x and y. Residuals are often thought of as estimates of the “error” term in a regression model, and most regression analyses assume that residuals are random normal variables with uniform variance across the range of x values (more on this in the coming modules). In ordinary least squares regression, the line of best fit minimizes the sum of the squared residuals, and the expected value for a residual is 0.
+
+Residuals are also used to create “covariate adjusted” variables, as they can be thought of as the response variable, y, with the linear effect of the predictor variable(s) removed. We’ll return to this idea when we move on to multivariate regression.
+
